@@ -29,6 +29,25 @@ func New(cfg config.Config) *Client {
 	}
 }
 
+func (c *Client) GetCurrentUser() error {
+	req, err := c.newRequest(http.MethodGet, "/rest/api/2/myself")
+	if err != nil {
+		return fmt.Errorf("get current user: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("get current user: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("get current user: unexpected status %s", resp.Status)
+	}
+
+	return nil
+}
+
 func (c *Client) newRequest(method, path string) (*http.Request, error) {
 	if strings.TrimSpace(c.baseURL) == "" {
 		return nil, fmt.Errorf("build request: base URL is empty")

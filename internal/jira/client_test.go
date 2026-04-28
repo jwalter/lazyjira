@@ -3,6 +3,7 @@ package jira
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jwalter/lazyjira/internal/auth"
@@ -62,5 +63,53 @@ func TestNewRequestConstructsURLCorrectly(t *testing.T) {
 	}
 	if err != nil {
 		t.Fatalf("newRequest() error = %v", err)
+	}
+}
+
+func TestGetCurrentUserSuccess(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %q, want %q", r.Method, http.MethodGet)
+		}
+		if r.URL.Path != "/rest/api/2/myself" {
+			t.Fatalf("path = %q, want %q", r.URL.Path, "/rest/api/2/myself")
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		Server: server.URL,
+		Email:  "user@example.com",
+		Token:  "secret-token",
+	})
+
+	if err := client.GetCurrentUser(); err != nil {
+		t.Fatalf("GetCurrentUser() error = %v", err)
+	}
+}
+
+func TestGetCurrentUserFailureStatus(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		Server: server.URL,
+		Email:  "user@example.com",
+		Token:  "secret-token",
+	})
+
+	err := client.GetCurrentUser()
+	if err == nil {
+		t.Fatal("GetCurrentUser() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "unexpected status 403 Forbidden") {
+		t.Fatalf("GetCurrentUser() error = %q, want unexpected status", err.Error())
 	}
 }
