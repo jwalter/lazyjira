@@ -1,6 +1,7 @@
 package jira
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,5 +112,88 @@ func TestGetCurrentUserFailureStatus(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unexpected status 403 Forbidden") {
 		t.Fatalf("GetCurrentUser() error = %q, want unexpected status", err.Error())
+	}
+}
+
+func TestSearchParsesValidResponse(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %q, want %q", r.Method, http.MethodGet)
+		}
+		if r.URL.Path != "/rest/api/2/search" {
+			t.Fatalf("path = %q, want %q", r.URL.Path, "/rest/api/2/search")
+		}
+		if got := r.URL.Query().Get("jql"); got != `project = TEST ORDER BY created DESC` {
+			t.Fatalf("jql = %q, want %q", got, `project = TEST ORDER BY created DESC`)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"issues": []map[string]any{
+				{
+					"key": "TEST-1",
+					"fields": map[string]any{
+						"summary": "First issue",
+						"status":  map[string]any{"name": "In Progress"},
+					},
+				},
+				{
+					"key": "TEST-2",
+					"fields": map[string]any{
+						"summary": "Second issue",
+						"status":  map[string]any{"name": "Done"},
+					},
+				},
+			},
+		}); err != nil {
+			t.Fatalf("Encode() error = %v", err)
+		}
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		Server: server.URL,
+		Email:  "user@example.com",
+		Token:  "secret-token",
+	})
+
+	issues, err := client.Search(`project = TEST ORDER BY created DESC`)
+	if err != nil {
+		t.Fatalf("Search() error = %v", err)
+	}
+
+	if len(issues) != 2 {
+		t.Fatalf("len(issues) = %d, want 2", len(issues))
+	}
+	if issues[0] != (Issue{Key: "TEST-1", Summary: "First issue", Status: "In Progress"}) {
+		t.Fatalf("issues[0] = %#v", issues[0])
+	}
+	if issues[1] != (Issue{Key: "TEST-2", Summary: "Second issue", Status: "Done"}) {
+		t.Fatalf("issues[1] = %#v", issues[1])
+	}
+}
+
+func TestSearchErrorResponse(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	client := New(config.Config{
+		Server: server.URL,
+		Email:  "user@example.com",
+		Token:  "secret-token",
+	})
+
+	_, err := client.Search("project = TEST")
+	if err == nil {
+		t.Fatal("Search() error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "unexpected status 400 Bad Request") {
+		t.Fatalf("Search() error = %q, want unexpected status", err.Error())
 	}
 }
