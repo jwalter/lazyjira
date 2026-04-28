@@ -38,6 +38,8 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("parse config file %s: %w", path, err)
 	}
 
+	cfg.applyEnvOverrides()
+
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("invalid config file %s: %w", path, err)
 	}
@@ -60,6 +62,18 @@ func expandPath(path string) (string, error) {
 	}
 
 	return filepath.Join(home, path[2:]), nil
+}
+
+func (c *Config) applyEnvOverrides() {
+	if value, ok := os.LookupEnv("LAZYJIRA_SERVER"); ok {
+		c.Server = value
+	}
+	if value, ok := os.LookupEnv("LAZYJIRA_EMAIL"); ok {
+		c.Email = value
+	}
+	if value, ok := os.LookupEnv("LAZYJIRA_TOKEN"); ok {
+		c.Token = value
+	}
 }
 
 func (c *Config) validate() error {

@@ -66,6 +66,60 @@ func TestLoadMissingFile(t *testing.T) {
 	}
 }
 
+func TestLoadEnvOverrides(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LAZYJIRA_SERVER", "https://override.atlassian.net")
+	t.Setenv("LAZYJIRA_EMAIL", "override@example.com")
+	t.Setenv("LAZYJIRA_TOKEN", "override-token")
+
+	writeConfigFile(t, `
+server: https://example.atlassian.net
+email: user@example.com
+token: secret-token
+`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Server != "https://override.atlassian.net" {
+		t.Fatalf("Config.Server = %q, want %q", cfg.Server, "https://override.atlassian.net")
+	}
+	if cfg.Email != "override@example.com" {
+		t.Fatalf("Config.Email = %q, want %q", cfg.Email, "override@example.com")
+	}
+	if cfg.Token != "override-token" {
+		t.Fatalf("Config.Token = %q, want %q", cfg.Token, "override-token")
+	}
+}
+
+func TestLoadPartialEnvOverride(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("LAZYJIRA_TOKEN", "override-token")
+
+	writeConfigFile(t, `
+server: https://example.atlassian.net
+email: user@example.com
+token: secret-token
+`)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Server != "https://example.atlassian.net" {
+		t.Fatalf("Config.Server = %q, want %q", cfg.Server, "https://example.atlassian.net")
+	}
+	if cfg.Email != "user@example.com" {
+		t.Fatalf("Config.Email = %q, want %q", cfg.Email, "user@example.com")
+	}
+	if cfg.Token != "override-token" {
+		t.Fatalf("Config.Token = %q, want %q", cfg.Token, "override-token")
+	}
+}
+
 func writeConfigFile(t *testing.T, contents string) {
 	t.Helper()
 
